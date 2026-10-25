@@ -1,0 +1,4 @@
+# Copiez ce fichier en .dev.vars pour le développement local (jamais commité).
+ADMIN_EMAIL=admin@example.com
+ADMIN_PASSWORD=choisissez-un-mot-de-passe-long
+SESSION_SECRET=chaine-aleatoire-de-32-caracteres-minimum
