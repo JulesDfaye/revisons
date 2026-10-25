@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow"><title>Administration — Révisons</title>
+<link rel="icon" href="/icon.svg" type="image/svg+xml">
+<style>
+:root{--g:#247146;--bg:#f4f7f5;--c:#fff;--t:#16301f;--m:#5b6b61;--b:#dbe4de;--r:#b3261e}
+@media(prefers-color-scheme:dark){:root{--bg:#0f1713;--c:#17211b;--t:#e6efe9;--m:#9fb1a6;--b:#2a3a31}}
+*{box-sizing:border-box}body{margin:0;font:15px/1.5 system-ui,sans-serif;background:var(--bg);color:var(--t)}
+[hidden]{display:none!important}h1,h2,h3{margin:.2em 0}.wrap{max-width:1100px;margin:auto;padding:1rem}
+.card{background:var(--c);border:1px solid var(--b);border-radius:14px;padding:1rem;margin:.8rem 0}
+input,select,textarea,button{font:inherit;color:inherit;border:1px solid var(--b);border-radius:9px;padding:.5rem .7rem;background:var(--c)}
+textarea{width:100%;min-height:70px}button{cursor:pointer}.pri{background:var(--g);color:#fff;border-color:var(--g)}.dng{color:var(--r);border-color:var(--r)}
+nav{display:flex;gap:.4rem;flex-wrap:wrap;margin:.6rem 0}nav button[aria-pressed=true]{background:var(--g);color:#fff;border-color:var(--g)}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:.7rem}.kpi b{display:block;font-size:1.8rem}.kpi span{color:var(--m)}
+table{width:100%;border-collapse:collapse;font-size:13px}th,td{text-align:left;padding:.4rem .5rem;border-bottom:1px solid var(--b);vertical-align:top}th{color:var(--m)}
+.scroll{overflow-x:auto}.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:.8rem}.row{display:flex;gap:.5rem;flex-wrap:wrap;align-items:center}
+#login{max-width:380px;margin:12vh auto}#login input{width:100%;margin:.3rem 0 .7rem}.err{color:var(--r);min-height:1.4em}.small{color:var(--m);font-size:12px}
+.bar{display:flex;align-items:center;gap:.4rem;margin:.2rem 0}.bar i{display:block;height:10px;background:var(--g);border-radius:5px}
+</style></head><body><div class="wrap">
+<section id="login" class="card" hidden><h1>🔐 Administration</h1><p class="small">Révisons — espace réservé</p>
+<form id="lf"><label>E-mail<input id="em" type="email" autocomplete="username" required></label><label>Mot de passe<input id="pw" type="password" autocomplete="current-password" required></label><div class="err" id="err" role="alert"></div><button class="pri" style="width:100%">Se connecter</button></form></section>
+<main id="app" hidden>
+<div class="row"><h1 style="flex:1">📚 Révisons — Administration</h1><a href="/" target="_blank" rel="noopener">Voir le site ↗</a><button id="out">Déconnexion</button></div>
+<nav id="tabs"><button data-t="dash">Tableau de bord</button><button data-t="jr">Journal de bord</button><button data-t="ct">Contenu &amp; site</button><button data-t="sec">Sécurité</button></nav>
+<div id="v"></div></main></div>
+<script>
+const $=s=>document.querySelector(s),esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const fmt=t=>new Date(t).toLocaleString('fr-FR',{dateStyle:'short',timeStyle:'medium'});
+const TYPES={visit:'Visite',lesson_open:'Leçon ouverte',quiz_done:'Quiz terminé'};
+let tab='dash',days=7,page=0,cfg,LS=[],lessonQ='';
+function show(ok){$('#login').hidden=ok;$('#app').hidden=!ok}
+async function api(p,o={}){const r=await fetch('/api/admin/'+p,{credentials:'same-origin',...o,headers:{'x-rv-admin':'1','content-type':'application/json'}});
+ const d=await r.json().catch(()=>({}));if(r.status===401&&p!=='login')show(false);if(!r.ok)throw new Error(d.error||('Erreur '+r.status));return d}
+$('#lf').onsubmit=async e=>{e.preventDefault();$('#err').textContent='';try{await api('login',{method:'POST',body:JSON.stringify({email:$('#em').value,password:$('#pw').value})});$('#pw').value='';start()}catch(x){$('#err').textContent=x.message}};
+$('#out').onclick=async()=>{try{await api('logout',{method:'POST',body:'{}'})}catch{}show(false)};
+$('#tabs').onclick=e=>{const b=e.target.closest('button');if(b){tab=b.dataset.t;page=0;render()}};
+async function start(){show(true);render()}
+async function render(){document.querySelectorAll('#tabs button').forEach(b=>b.setAttribute('aria-pressed',b.dataset.t===tab));
+ try{await({dash,jr,ct,sec}[tab])()}catch(x){if(x.message!=='Non autorisé')$('#v').innerHTML='<p class="err">'+esc(x.message)+'</p>'}}
+const rangeSel=()=>`<select id="rg">${[1,7,30,90].map(d=>`<option value="${d}" ${d===days?'selected':''}>${d===1?'24 heures':d+' jours'}</option>`).join('')}</select>`;
+const bindRange=()=>{$('#rg').onchange=e=>{days=+e.target.value;page=0;render()}};
+const bars=(rows)=>{const m=Math.max(1,...rows.map(r=>r.n));return rows.length?rows.map(r=>`<div class="bar"><span style="min-width:90px">${esc(r.k)}</span><i style="width:${Math.round(r.n/m*60)}%"></i><b>${r.n}</b></div>`).join(''):'<p class="small">Pas encore de données.</p>'};
+async function dash(){const s=await api('stats?days='+days),m=Math.max(1,...s.daily.map(d=>d.visits));
+ const w=Math.max(s.daily.length,1),bw=600/w,svg=s.daily.map((d,i)=>{const h=Math.round(d.visits/m*110);return `<rect x="${i*bw+1}" y="${120-h}" width="${Math.max(bw-3,1)}" height="${h}" rx="2" fill="#247146"><title>${esc(d.d)} : ${d.visits} visite(s)</title></rect>`}).join('');
+ $('#v').innerHTML=`<div class="row"><h2 style="flex:1">Vue d'ensemble</h2>${rangeSel()}</div>
+ <div class="kpis"><div class="card kpi"><b>${s.visits}</b><span>Visites</span></div><div class="card kpi"><b>${s.visitors}</b><span>Visiteurs uniques</span></div><div class="card kpi"><b>${s.lessons}</b><span>Leçons ouvertes</span></div><div class="card kpi"><b>${s.quizzes}</b><span>Quiz terminés</span></div><div class="card kpi"><b>${s.avgScore==null?'–':s.avgScore+' %'}</b><span>Score moyen</span></div></div>
+ <div class="card"><h3>Visites par jour</h3>${s.daily.length?`<svg viewBox="0 0 600 130" width="100%" role="img" aria-label="Visites par jour">${svg}</svg>`:'<p class="small">Pas encore de visites sur la période.</p>'}</div>
+ <div class="grid2"><div class="card"><h3>Leçons les plus ouvertes</h3>${bars(s.top)}</div><div class="card"><h3>Par classe</h3>${bars(s.byClasse)}</div><div class="card"><h3>Pays</h3>${bars(s.byCountry)}</div><div class="card"><h3>Appareils</h3>${bars(s.byDevice)}</div></div>`;bindRange()}
+async function jr(){const type=$('#ft')?.value||'',q=$('#fq')?.value||'';const d=await api(`events?days=${days}&limit=50&offset=${page*50}&type=${encodeURIComponent(type)}&q=${encodeURIComponent(q)}`);
+ $('#v').innerHTML=`<div class="card"><div class="row"><h2 style="flex:1">Journal de bord</h2>${rangeSel()}<select id="ft"><option value="">Tous les types</option>${Object.entries(TYPES).map(([k,v])=>`<option value="${k}" ${k===type?'selected':''}>${v}</option>`).join('')}</select><input id="fq" placeholder="Rechercher…" value="${esc(q)}"><button id="go">Filtrer</button><a href="/api/admin/events.csv?days=${days}&type=${encodeURIComponent(type)}&q=${encodeURIComponent(q)}"><button>⬇ Export CSV</button></a></div>
+ <p class="small">${d.total} événement(s) · page ${page+1}</p><div class="scroll"><table><tr><th>Date</th><th>Type</th><th>Leçon</th><th>Classe / matière</th><th>Score</th><th>Pays</th><th>Appareil</th><th>Source</th></tr>
+ ${d.rows.map(r=>`<tr><td>${fmt(r.ts)}</td><td>${esc(TYPES[r.type]||r.type)}</td><td>${esc(r.lesson_id||'')}</td><td>${esc([r.classe,r.matiere].filter(Boolean).join(' · '))}</td><td>${r.total?r.score+'/'+r.total:''}</td><td>${esc(r.country||'')}</td><td>${esc(r.device||'')}</td><td>${esc(r.referrer||'direct')}</td></tr>`).join('')||'<tr><td colspan="8">Aucun événement.</td></tr>'}</table></div>
+ <div class="row" style="margin-top:.6rem"><button id="pv" ${page?'':'disabled'}>← Précédent</button><button id="nx" ${(page+1)*50>=d.total?'disabled':''}>Suivant →</button></div></div>`;
+ bindRange();$('#go').onclick=()=>{page=0;jr()};$('#fq').onkeydown=e=>{if(e.key==='Enter'){page=0;jr()}};$('#pv').onclick=()=>{page--;jr()};$('#nx').onclick=()=>{page++;jr()}}
+async function ct(){cfg=await api('config');if(!LS.length){try{const t=await (await fetch('/index.html')).text(),l=t.split('\n').find(x=>x.startsWith('const LESSONS = '));LS=JSON.parse(l.slice(16).replace(/;\s*$/,''))}catch{LS=[]}}
+ $('#v').innerHTML=`<div class="card"><h2>Site</h2><label>Bandeau d'annonce (affiché en haut du site)<input id="an" style="width:100%" maxlength="300" value="${esc(cfg.announcement)}"></label>
+ <p><label><input type="checkbox" id="mt" ${cfg.maintenance?'checked':''}> Mode maintenance (le site affiche le message ci-dessous aux visiteurs)</label></p><label>Message de maintenance<input id="mm" style="width:100%" maxlength="300" value="${esc(cfg.maintenanceMessage)}"></label></div>
+ <div class="card"><div class="row"><h2 style="flex:1">Leçons (${LS.length})</h2><input id="lq" placeholder="Filtrer par titre, classe, matière…" value="${esc(lessonQ)}"></div><p class="small">Masquez une leçon ou modifiez ses textes sans redéployer le site. Les modifications s'appliquent à tous les visiteurs.</p><div class="scroll"><table id="lt"></table></div><div id="ed"></div></div>
+ <div class="row"><button class="pri" id="sv">💾 Enregistrer les modifications</button><span id="ok" class="small"></span></div>`;
+ $('#lq').oninput=e=>{lessonQ=e.target.value;lessons()};$('#sv').onclick=save;lessons()}
+function lessons(){const q=lessonQ.toLowerCase();$('#lt').innerHTML='<tr><th>Masquée</th><th>ID</th><th>Classe</th><th>Matière</th><th>Titre</th><th></th></tr>'+LS.filter(d=>!q||(d.titre+d.classe+d.matiere+d.id).toLowerCase().includes(q)).map(d=>{const o=cfg.overrides[d.id]||{};return `<tr><td><input type="checkbox" data-h="${esc(d.id)}" ${cfg.hidden.includes(d.id)?'checked':''}></td><td>${esc(d.id)}</td><td>${esc(d.classe)}</td><td>${esc(d.matiere)}</td><td>${esc(o.titre||d.titre)}${Object.keys(o).length?' ✏️':''}</td><td><button data-e="${esc(d.id)}">Modifier</button></td></tr>`}).join('');
+ $('#lt').onclick=e=>{const h=e.target.dataset.h,b=e.target.dataset.e;if(h){cfg.hidden=cfg.hidden.filter(x=>x!==h);if(e.target.checked)cfg.hidden.push(h)}if(b)edit(b)}}
+function edit(id){const d=LS.find(x=>x.id===id),o=cfg.overrides[id]||{};const F=['titre','objectif','texte','exemple','activite'];
+ $('#ed').innerHTML=`<div class="card"><h3>Modifier : ${esc(d.titre)}</h3>${F.map(k=>`<label>${k}<textarea data-f="${k}">${esc(o[k]??d[k]??'')}</textarea></label>`).join('')}<div class="row"><button class="pri" id="ap">Appliquer</button><button id="rs">Rétablir l'original</button></div><p class="small">Pensez à cliquer sur « Enregistrer les modifications » ensuite.</p></div>`;
+ $('#ap').onclick=()=>{const n={};F.forEach(k=>{const v=document.querySelector(`[data-f=${k}]`).value.trim();if(v&&v!==(d[k]||''))n[k]=v});if(Object.keys(n).length)cfg.overrides[id]=n;else delete cfg.overrides[id];$('#ed').innerHTML='';lessons()};
+ $('#rs').onclick=()=>{delete cfg.overrides[id];$('#ed').innerHTML='';lessons()};$('#ed').scrollIntoView({behavior:'smooth'})}
+async function save(){cfg.announcement=$('#an').value;cfg.maintenance=$('#mt').checked;cfg.maintenanceMessage=$('#mm').value;try{await api('config',{method:'POST',body:JSON.stringify(cfg)});$('#ok').textContent='✓ Enregistré — visible sur le site dans la minute.'}catch(x){$('#ok').textContent='✗ '+x.message}}
+async function sec(){const d=await api('log');$('#v').innerHTML=`<div class="card"><h2>Journal d'administration</h2><div class="scroll"><table><tr><th>Date</th><th>Action</th><th>Détail</th><th>Empreinte IP</th><th>Résultat</th></tr>${d.rows.map(r=>`<tr><td>${fmt(r.ts)}</td><td>${esc(r.action)}</td><td>${esc(r.detail||'')}</td><td>${esc(r.ip_hash||'')}</td><td>${r.ok?'✓':'✗ échec'}</td></tr>`).join('')}</table></div></div>
+ <div class="card"><h3>Conservation des données</h3><div class="row"><span>Supprimer les événements de plus de</span><input id="pd" type="number" min="1" value="90" style="width:90px"><span>jours</span><button class="dng" id="pg">Purger</button></div><span id="pm" class="small"></span></div>
+ <div class="card"><h3>Mot de passe</h3><p class="small">Les identifiants sont des secrets Cloudflare. Pour les changer : <code>npx wrangler secret put ADMIN_PASSWORD</code>. Changer <code>SESSION_SECRET</code> déconnecte toutes les sessions.</p></div>`;
+ $('#pg').onclick=async()=>{if(!confirm('Supprimer définitivement ces événements ?'))return;const r=await api('purge',{method:'POST',body:JSON.stringify({days:+$('#pd').value})});$('#pm').textContent=r.deleted+' événement(s) supprimé(s).'}}
+api('config').then(start).catch(()=>show(false));
+</script></body></html>
